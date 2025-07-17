@@ -1,7 +1,10 @@
 import numpy as np
 from scipy.integrate import quad, dblquad
 from scipy.special import erfc, erf
+import os, sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+from simulation_tools import rvs_pointing_err, rvs_LN_fading
 # from scipy.stats import lognorm
 
 
@@ -135,17 +138,36 @@ def weather_condition(tau_zen):
         return 'Unknown condition', 10000  # Default value
 
 
+# def compute_slant_distance(h_s, H_g, zenith_angle_rad):
+#     return (h_s - H_g)/np.cos(zenith_angle_rad)
+
 def compute_slant_distance(h_s, H_g, zenith_angle_rad):
-    return (h_s - H_g)/np.cos(zenith_angle_rad)
+    """Computes the slant distance between satellite and ground station."""
+    delta_h = h_s - H_g
+    if np.cos(zenith_angle_rad) == 0:
+        return float('inf')
+    horizontal_distance = delta_h * np.tan(zenith_angle_rad)
+    return np.sqrt(delta_h**2 + horizontal_distance**2)
+
+
+# def equivalent_beam_width_squared(a, w_L):
+#     # w_L: beam radius at receiver before aperture clipping
+#     nu = (np.sqrt(np.pi) * a) / (np.sqrt(2) * w_L)
+#     numerator = np.sqrt(np.pi) * erf(nu)
+#     denominator = 2 * nu * np.exp(-nu**2)
+#     return w_L**2 * (numerator / denominator)
 
 
 def equivalent_beam_width_squared(a, w_L):
-    # w_L: beam radius at receiver before aperture clipping
+    """Calculates the equivalent beam width squared for pointing error."""
+    if w_L == 0:
+        return float('inf')
     nu = (np.sqrt(np.pi) * a) / (np.sqrt(2) * w_L)
     numerator = np.sqrt(np.pi) * erf(nu)
     denominator = 2 * nu * np.exp(-nu**2)
+    if denominator == 0: # Avoid division by zero
+        return w_L**2 * 1e10 # Return a very large value if denominator is zero
     return w_L**2 * (numerator / denominator)
-
 
 def compute_avg_qber(
         sigma_theta_x, sigma_theta_y, slant_distance,
@@ -304,54 +326,64 @@ def compute_SKR_BBM92(qber, avg_yield, rep_rate=1e9, sifting_coefficient=0.5, kr
     skr = R_key_bit * (1 - kr_efficiency * H2)
     return max(skr, 0)  # SKRが負になるのを防ぐ
 
-def photon_number_probability(n, wavelength):
+def photon_number_probability(n, lambda_):
     """
     Calculates the probability P(n) of having n photons in a pulse
     """
     if n < 0:
         return 0.0
-    numerator = (n + 1) * (wavelength ** n)
-    denominator = (1 + wavelength) ** (n + 2)
+    numerator = (n + 1) * (lambda_ ** n)
+    denominator = (1 + lambda_) ** (n + 2)
+    return numerator / denominator
+
+def P(n, λ):
+    """
+    Calculates the probability P(n) of having n photons in a pulse,
+    based on the provided formula.
+    """
+    if n < 0:
+        return 0.0
+    numerator = (n + 1) * (λ ** n)
+    denominator = (1 + λ) ** (n + 2)
     return numerator / denominator
 
 
-def qber_ma_model(e0, ed, etaA, etaB, lambda_, Y0_A, Y0_B):
-    numerator = 2 * (e0 - ed) * etaA * etaB * lambda_ * (1 + lambda_)
-    denominator = (1 + etaA * lambda_) * (1 + etaB * lambda_) * (1 + etaA * lambda_ + etaB * lambda_ - etaA * etaB * lambda_)
-    Q_lambda = compute_Q_lambda(lambda_, etaA, etaB, Y0_A, Y0_B)
-    E_lambda = (e0 * Q_lambda - numerator / denominator) / Q_lambda
-    E_lambda = float(E_lambda)
-    return E_lambda
+# def qber_ma_model(e0, ed, etaA, etaB, lambda_, Y0_A, Y0_B):
+#     numerator = 2 * (e0 - ed) * etaA * etaB * lambda_ * (1 + lambda_)
+#     denominator = (1 + etaA * lambda_) * (1 + etaB * lambda_) * (1 + etaA * lambda_ + etaB * lambda_ - etaA * etaB * lambda_)
+#     Q_lambda = compute_Q_lambda(lambda_, etaA, etaB, Y0_A, Y0_B)
+#     E_lambda = (e0 * Q_lambda - numerator / denominator) / Q_lambda
+#     E_lambda = float(E_lambda)
+#     return E_lambda
 
 
-def compute_Q_lambda(lambda_, etaA, etaB, Y0_A, Y0_B):
+def compute_Q_lambda(lambda_, etaA, etaB, p_dark):
     """
     Calculates the overall gain Q_lambda from Ma et al. (Eq. 9, full version).
     Parameters:
         lambda_ (float): PDC parameter (lambda = sinh^2(χ), mu = 2*lambda)
         etaA (float): Total detection efficiency for Alice
         etaB (float): Total detection efficiency for Bob
-        Y0_A (float): Background (dark) count probability for Alice
-        Y0_B (float): Background (dark) count probability for Bob
+        p_dark (float): Probability of dark counts or background noise
     Returns:
         Q_lambda (float): Overall gain (coincidence detection probability per pulse)
     """
-    term1 = (1 - Y0_A) / (1 + etaA * lambda_)**2
-    term2 = (1 - Y0_B) / (1 + etaB * lambda_)**2
+    term1 = (1 - p_dark) / (1 + etaA * lambda_)**2
+    term2 = (1 - p_dark) / (1 + etaB * lambda_)**2
     denominator_term3 = (1 + etaA * lambda_ + etaB * lambda_ - etaA * etaB * lambda_)**2
-    term3 = ((1 - Y0_A) * (1 - Y0_B)) / denominator_term3
+    term3 = ((1 - p_dark) * (1 - p_dark)) / denominator_term3
 
     Q_lambda = 1 - term1 - term2 + term3
     return Q_lambda
 
 
-def yield_from_photon_number(n, Y0_A, Y0_B, eta_A, eta_B):
-    term_A = 1 - (1 - Y0_A) * (1 - eta_A)**n
-    term_B = 1 - (1 - Y0_B) * (1 - eta_B)**n
+def yield_from_photon_number(n, p_dark, eta_A, eta_B):
+    term_A = 1 - (1 - p_dark) * (1 - eta_A)**n
+    term_B = 1 - (1 - p_dark) * (1 - eta_B)**n
     Yn = term_A * term_B
     return Yn
 
-def pauli_x_application_probability_bob(n, e_0, e_d, Yn, eta_A, eta_B):
+def pauli_x_application_probability_bob(n, e_0, e_pol, Yn, eta_A, eta_B):
     """
     Calculate Pauli X error rate (e_n) based on Ma et al. Eq (11)-like formula.
 
@@ -383,18 +415,43 @@ def pauli_x_application_probability_bob(n, e_0, e_d, Yn, eta_A, eta_B):
     term2_denominator = eta_B - eta_A
     term2 = term2_numerator / term2_denominator if term2_denominator != 0 else 0.0
 
-    correction = (2 * (e_0 - e_d) / (n_plus_1 * Yn)) * (term1 - term2)
+    correction = (2 * (e_0 - e_pol) / (n_plus_1 * Yn)) * (term1 - term2)
 
     current_bob_qber = e_0 - correction
     return current_bob_qber
 
+
+def compute_EQ_lambda(e_0, eta_A, eta_B, lambda_, p_dark, e_pol):
+    """
+    Q(eta_A, eta_B, lambda, p_dark) の修正版。
+    """
+    # 既存の Q_lambda_func の結果を取得
+    Q_lambda = compute_Q_lambda(lambda_, eta_A, eta_B, p_dark)
+
+    # 追加項の分母
+    denom_term1 = (1 + eta_A * lambda_)
+    denom_term2 = (1 + eta_B * lambda_)
+    denom_term3 = (1 + eta_A * lambda_ + eta_B * lambda_ - eta_A * eta_B * lambda_)
+    
+    min_denom = 1e-15 # ゼロ除算防止
+
+    # 分母がゼロに近づかないようにクリッピング
+    denom_product = (denom_term1 + min_denom) * (denom_term2 + min_denom) * (denom_term3 + min_denom)
+    
+    # 追加項
+    additional_term = (2 * (e_0 - e_pol) * eta_A * eta_B * lambda_ * (1 + lambda_)) / (denom_product)
+
+    # 修正された Q の値
+    EQ_lambda = e_0 * Q_lambda - additional_term
+
+    return EQ_lambda
 
 
 def compute_avg_qber_bbm92(
         sigma_theta_x, sigma_theta_y, slant_distance_A, slant_distance_B,
         mu_x, mu_y, zenith_angle_rad_A, zenith_angle_rad_B,
         h_OGS, h_atm, w_L_A, w_L_B, tau_zen_A, tau_zen_B,
-        Cn2_profile, a, e_0, e_d, Y0_A, Y0_B, lambda_, wavelength):
+        Cn2_profile, a, e_0, e_pol, p_dark, lambda_, wavelength):
 
     def channel_params(slant_distance, zenith_angle_rad, w_L, tau_zen):
         sigma_x = sigma_theta_x * slant_distance
@@ -413,7 +470,8 @@ def compute_avg_qber_bbm92(
     )
 
     def integrand_gain(eta_A, eta_B):
-        Q_lambda = compute_Q_lambda(lambda_, eta_A, eta_B, Y0_A, Y0_B)
+        # Q_lambda = compute_Q_lambda(lambda_, eta_A, eta_B, p_dark)
+        Q_lambda = Q_lambda_func(eta_A, eta_B, lambda_, p_dark)
 
         p_eta_A = transmitivity_pdf(
             eta_A, mu_x, mu_y, sigma_x_A, sigma_y_A, zenith_angle_rad_A,
@@ -428,8 +486,12 @@ def compute_avg_qber_bbm92(
         return Q_lambda * p_eta_A * p_eta_B
 
     def integrand_error(eta_A, eta_B):
-        Q_lambda = compute_Q_lambda(lambda_, eta_A, eta_B, Y0_A, Y0_B)
-        E_lambda = qber_ma_model(e_0, e_d, eta_A, eta_B, lambda_, Y0_A, Y0_B)
+        # EQ_lambda = compute_EQ_lambda(
+        #     e_0, eta_A, eta_B, lambda_, p_dark, e_pol
+        # )
+        EQ_lambda = Q_lambda_func_modified(eta_A, eta_B, lambda_, p_dark, e_0, e_pol)
+        # Q_lambda = compute_Q_lambda(lambda_, eta_A, eta_B, Y0_A, Y0_B)
+        # E_lambda = qber_ma_model(e_0, e_d, eta_A, eta_B, lambda_, Y0_A, Y0_B)
 
         p_eta_A = transmitivity_pdf(
             eta_A, mu_x, mu_y, sigma_x_A, sigma_y_A, zenith_angle_rad_A,
@@ -441,32 +503,70 @@ def compute_avg_qber_bbm92(
             w_L_B, w_Leq_B, tau_zen_B, varphi_mod_B, wavelength,
             h_OGS, h_atm, Cn2_profile, a
         )
-        return Q_lambda * E_lambda * p_eta_A * p_eta_B
+        return EQ_lambda * p_eta_A * p_eta_B
 
     avg_yield, _ = dblquad(
-        integrand_gain, 0, np.inf,
-        lambda _: 0, lambda _: np.inf,
+        integrand_gain, 0, 1,
+        lambda _: 0, lambda _: 1,
         epsabs=1e-9, epsrel=1e-9
     )
     avg_error, _ = dblquad(
-        integrand_error, 0, np.inf,
-        lambda _: 0, lambda _: np.inf,
+        integrand_error, 0, 1,
+        lambda _: 0, lambda _: 1,
         epsabs=1e-9, epsrel=1e-9
     )
 
-
-    # avg_yield, _ = dblquad(
-    #     integrand_gain, 0, 1,
-    #     lambda _: 0, lambda _: 1,
-    #     epsabs=1e-9, epsrel=1e-9
-    # )
-    # avg_error, _ = dblquad(
-    #     integrand_error, 0, 1,
-    #     lambda _: 0, lambda _: 1,
-    #     epsabs=1e-9, epsrel=1e-9
-    # )
-
     avg_qber = avg_error / avg_yield if avg_yield > 0 else 0
-    return avg_qber, avg_yield
+    return avg_qber, avg_yield, avg_error
 
     
+def compute_insta_eta(tau_zen, zenith_angle_rad, slant_path, mu_x, mu_y, sigma_theta_x, sigma_theta_y, a, w_Leq_squared_alice, theta_rad, sigma_R_squared):
+    eta_ell = compute_atm_loss(tau_zen, zenith_angle_rad)
+    eta_p = rvs_pointing_err(
+        mu_x, mu_y, sigma_theta_x, sigma_theta_y,
+        slant_path, theta_rad, a, w_Leq_squared_alice, size=1
+    )[0] 
+    I_a_alice = rvs_LN_fading(sigma_R_squared, size=1)[0]  
+    insta_eta = eta_ell * I_a_alice * eta_p
+    return insta_eta
+
+
+def Q_lambda_func(eta_A, eta_B, lambda_val, p_dark):
+    term1_denominator = (1 + eta_A * lambda_val)**2
+    term2_denominator = (1 + eta_B * lambda_val)**2
+    term3_denominator = (1 + eta_A * lambda_val + eta_B * lambda_val - eta_A * eta_B * lambda_val)**2
+
+    min_denom = 1e-15
+
+    q_lambda = 1.0 \
+             - (1.0 - p_dark) / (term1_denominator + min_denom) \
+             - (1.0 - p_dark) / (term2_denominator + min_denom) \
+             + ((1.0 - p_dark) * (1.0 - p_dark)) / (term3_denominator + min_denom)
+    
+    return q_lambda
+
+# --- NEW: Q_lambda の修正版 ---
+def Q_lambda_func_modified(eta_A, eta_B, lambda_val, p_dark, e_0_val, e_pol_val):
+    """
+    Q(eta_A, eta_B, lambda, p_dark) の修正版。
+    """
+    # 既存の Q_lambda_func の結果を取得
+    q_lambda_original = Q_lambda_func(eta_A, eta_B, lambda_val, p_dark)
+
+    # 追加項の分母
+    denom_term1 = (1 + eta_A * lambda_val)
+    denom_term2 = (1 + eta_B * lambda_val)
+    denom_term3 = (1 + eta_A * lambda_val + eta_B * lambda_val - eta_A * eta_B * lambda_val)
+    
+    min_denom = 1e-15 # ゼロ除算防止
+
+    # 分母がゼロに近づかないようにクリッピング
+    denom_product = (denom_term1 + min_denom) * (denom_term2 + min_denom) * (denom_term3 + min_denom)
+    
+    # 追加項
+    additional_term = (2 * (e_0_val - e_pol_val) * eta_A * eta_B * lambda_val * (1 + lambda_val)) / (denom_product)
+
+    # 修正された Q の値
+    q_modified = e_0_val * q_lambda_original - additional_term
+    
+    return q_modified

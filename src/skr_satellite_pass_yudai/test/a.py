@@ -21,7 +21,7 @@ insta_eta_alice = 0.00084288
 insta_eta_bob = 0.00237062
 num_detected_event = 0
 
-yield_val = yield_from_photon_number(1, Y0_A, Y0_B, insta_eta_alice, insta_eta_bob)
+yield_val = yield_from_photon_number(1, p_dark, insta_eta_alice, insta_eta_bob)
 # print(f'Yield value: {yield_val}')
 
 # Store photon number probabilities in a dictionary with keys like 'p_0', 'p_1', ...

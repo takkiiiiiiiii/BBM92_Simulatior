@@ -125,13 +125,29 @@ def apply_noise_model(p_alice_meas, p_bob_meas, num_pairs_for_circuit):
 
 # --- Quantum Channel Model Functions ---
 # Global parameters from default_parameters.py
+# a = 0.75 # Aperture radius of the receiver telescope (m)
+# n_s = 1.0 # Mean photon number per pulse (for single photon source)
+# wavelength = 0.85e-6 # Wavelength of light (m)
+# h_OGS = 10 # Height of Optical Ground Station (m)
+# h_s = 20 * 1000 # Height of Satellite (m)
+# h_atm = 20 * 1000 # Height of atmosphere (m)
+# theta_rad = 0.2e-3 # Beam divergence angle (radians)
+# v_wind = 21 # Wind speed (m/s) for Cn2 profile
+# mu_x = 0 # Mean pointing error in x (m)
+# mu_y = 0 # Mean pointing error in y (m)
+# sigma_theta_x = theta_rad/8 # Standard deviation of pointing error in x (radians)
+# sigma_theta_y = theta_rad/8 # Standard deviation of pointing error in y (radians)
+# e_0 = 0.5 # Detector efficiency
+# p_dark = 1e-5 # Dark count probability
+# e_pol = 1/100 # Polarization misalignment error
+
 a = 0.75 # Aperture radius of the receiver telescope (m)
-n_s = 1.0 # Mean photon number per pulse (for single photon source)
+n_s = 0.5 # Mean photon number per pulse (for single photon source)
 wavelength = 0.85e-6 # Wavelength of light (m)
 h_OGS = 10 # Height of Optical Ground Station (m)
 h_s = 550 * 1000 # Height of Satellite (m)
 h_atm = 20 * 1000 # Height of atmosphere (m)
-theta_rad = 0.2e-3 # Beam divergence angle (radians)
+theta_rad = 10e-6 # Beam divergence angle (radians)
 v_wind = 21 # Wind speed (m/s) for Cn2 profile
 mu_x = 0 # Mean pointing error in x (m)
 mu_y = 0 # Mean pointing error in y (m)
@@ -140,6 +156,7 @@ sigma_theta_y = theta_rad/8 # Standard deviation of pointing error in y (radians
 e_0 = 0.5 # Detector efficiency
 p_dark = 1e-5 # Dark count probability
 e_pol = 1/100 # Polarization misalignment error
+lambda_val = 0.5 * n_s # Half of the expected photon pair number
 
 def compute_atm_loss(tau_zen, zenith_angle_rad):
     """Computes atmospheric loss based on zenith angle."""

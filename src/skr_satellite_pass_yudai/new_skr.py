@@ -1,3 +1,18 @@
+from os import getcwd
+from os.path import join, basename
+from sys import path 
+
+libs_dir = join("/".join(getcwd().split("/")[:-2]))
+path.append(libs_dir)
+
+# filename = basename(globals()['__vsc_ipynb_file__']).split(".")[0]
+
+import numpy as np
+from libs.qchannel_model import *
+import matplotlib.pyplot as plt
+from libs.figure_config import *
+# from libs.simulation_tools import *
+from libs.satellite import *
 import numpy as np
 import random
 from collections import Counter
@@ -15,13 +30,7 @@ from tool import (
     sigma_theta_x, sigma_theta_y, e_0, p_dark, e_pol
 )
 
-from qchannel_model import (
-    transmitivity_pdf,
-    compute_sigma_mod,
-    sigma_to_variance,
-    mod_jitter,
-    compute_A0
-)
+
 
 
 from scipy.special import erf, erfc
@@ -209,27 +218,28 @@ def main():
     array_size = 10**5
     
     # Average photon numbers to simulate
-    ns_values = np.array([0.01, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.4])
+    # ns_values = np.array([0.01, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4, 2.4])
+    ns_values = np.array([0.1, 0.2, 0.4, 0.6, 0.8, 1.0])
 
     # Bob Configurations
     bob_configs = [
-        {"id": 1, "zenith_angle_deg": 10},
-        {"id": 2, "zenith_angle_deg": 45}
+        {"id": 1, "zenith_angle_deg": 59.12231128},
+        # {"id": 2, "zenith_angle_deg": 45}
     ]
     
     # Store results for plotting
     results_bob1_sim_skr = []
     results_bob1_theo_skr = []
-    results_bob2_sim_skr = []
-    results_bob2_theo_skr = []
+    # results_bob2_sim_skr = []
+    # results_bob2_theo_skr = []
     results_alice_sim_skr = []
     results_alice_theo_skr = []
 
     # New lists to store QBER results
     results_bob1_sim_qber = []
     results_bob1_theo_qber = []
-    results_bob2_sim_qber = []
-    results_bob2_theo_qber = []
+    # results_bob2_sim_qber = []
+    # results_bob2_theo_qber = []
 
 
     print(f"--- QKD Simulation Started (Time-Slot Method) ---")
@@ -237,11 +247,11 @@ def main():
     print(f"Photon number distribution array size (pulses per timeslot): {array_size}")
     print(f"Bell State ID used: {selected_state_id}\n")
     print("--- Alice Configuration ---")
-    print(f"  Zenith Angle: 30 degrees, Tau_zen: 0.91")
+    print(f"  Zenith Angle: 59.82220731 degrees, Tau_zen: 0.81")
     print("----------------------------------------")
 
     # --- Pre-calculate static channel parameters for Alice ---
-    alice_precalc_params = _get_precalculated_channel_params(30, 0.91)
+    alice_precalc_params = _get_precalculated_channel_params(59.82220731, 0.81)
 
     # Loop through different n_s values
     for current_ns in ns_values:
@@ -268,29 +278,36 @@ def main():
             total_pulses_generated_overall = 0 
 
             # Pre-calculate static channel parameters for the current Bob zenith angle
-            bob_precalc_params = _get_precalculated_channel_params(bob_zenith_deg, 0.91) # tau_zenは固定
+            bob_precalc_params = _get_precalculated_channel_params(bob_zenith_deg, 0.81) # tau_zenは固定
 
             # --- Time slot loop ---
             for ts in range(num_timeslots):
                 # Dynamically calculate instantaneous channel parameters for Alice and current Bob
                 insta_eta_alice = generate_insta_eta_optimized(alice_precalc_params)
                 insta_eta_bob = generate_insta_eta_optimized(bob_precalc_params)
+                # print(insta_eta_alice, insta_eta_bob)
 
                 # --- Photon number distribution and detection simulation ---
                 lambda_val = 0.5 * current_ns # Use current_ns for lambda_val
+                # print(f"lambda_signal: {lambda_val}")
                 
                 n_values = np.arange(11)
                 p_values_raw = [P(n, lambda_val) for n in n_values[:10]]
+                # print(f"p_values_raw: {p_values_raw}")
                 p_values = p_values_raw[:]
                 p_values.append(1.0 - sum(p_values))
                 p_values = np.array(p_values)
                 p_values = np.clip(p_values, 0, 1)
                 p_values = p_values / np.sum(p_values)
+                # print(f"Photon number probabilities: {p_values}")
 
                 photon_numbers_array = np.random.choice(n_values, size=array_size, p=p_values)
-                count_array = Counter(photon_numbers_array)
                 
+                count_array = Counter(photon_numbers_array)
+                # print(f'count_array: {count_array}')
+
                 n_detect_event = [0] * len(n_values)
+                # print(f"n_detect_event: {n_detect_event}")
                 
                 current_timeslot_effective_pairs = 0
                 total_pulses_generated_overall += array_size
@@ -302,6 +319,7 @@ def main():
                     p_detect_bob_for_n = (1 - (1 - p_dark) * ((1 - insta_eta_bob)**i))
                     
                     Yi = p_detect_alice_for_n * p_detect_bob_for_n
+                    # print(f"Yi for n={i}: {Yi}")
                     
                     for j in range(num_pulses_with_n_photons):
                         if random.random() < Yi:
@@ -313,8 +331,9 @@ def main():
 
                 if current_timeslot_effective_pairs == 0:
                     continue
-
+                # print(current_ns)
                 # --- Calculate n-dependent QBER and call BBM92 simulation ---
+                # print(f"n_detect_event: {n_detect_event}")
                 for i in range(len(n_detect_event)):
                     if n_detect_event[i] > 0:
                         p_detect_alice_for_n = (1 - (1 - p_dark) * ((1 - insta_eta_alice)**i))
@@ -335,31 +354,35 @@ def main():
                             current_bob_qber = e_0 - ((2*(e_0-e_pol)/((i+1)*yi)) * (
                                 (1-(1-insta_eta_alice)**(i+1)*(1-insta_eta_bob)**(i+1))/(1-(1-insta_eta_alice)*(1-insta_eta_bob)) - term2
                             ))
-                            
+                        # print(f"Current Alice QBER: {current_alice_qber}, Current Bob QBER: {current_bob_qber}")  
+                        # print(n_detect_event[i]) 
                         count_sifted, count_error = bbm92simulation(
                             n_detect_event[i],
                             current_alice_qber,
                             current_bob_qber,
                             selected_state_id
                         )
+                        # print(f'count_sifted: {count_sifted}, count_error: {count_error}')
+                        
                         total_sifted_bit_overall += count_sifted
                         total_error_bit_overall += count_error
 
+            print(f'total_sifted_bit_length: {total_sifted_bit_overall}, total_err_num: {total_error_bit_overall}')
             # --- Post-simulation QBER verification (Overall for current zenith angle) ---
             print(f"\n--- Results for Bob {bob_id}'s Zenith Angle: {bob_zenith_deg} degrees ---")
             
             average_simulated_sifted_bits = total_sifted_bit_overall / (array_size * num_timeslots)
             average_simulated_error_bits = total_error_bit_overall / (array_size * num_timeslots)
-
+            print(lambda_val, p_dark, e_0, e_pol)
             print(f"  Sifted Bits (%) : {average_simulated_sifted_bits*100:.8f}")
             print(f"  Error  Bits (%) : {average_simulated_error_bits*100:.8f}")
 
             # --- Theoretical Calculations ---
-            zenith_angle_rad_alice = np.deg2rad(30)
+            zenith_angle_rad_alice = np.deg2rad(59.82220731)
             sigma_R_alice = np.sqrt(alice_precalc_params['sigma_R_squared'])
             w_Leq_alice = np.sqrt(alice_precalc_params['w_Leq_squared'])
             w_L_alice = alice_precalc_params['w_L_beam']
-            tau_zen_alice = 0.91
+            tau_zen_alice = 0.81
             slant_distance_alice = alice_precalc_params['slant_distance']
             sigma_x_alice = sigma_theta_x * slant_distance_alice
             sigma_y_alice = sigma_theta_y * slant_distance_alice
@@ -368,7 +391,7 @@ def main():
             sigma_R_bob = np.sqrt(bob_precalc_params['sigma_R_squared'])
             w_Leq_bob = np.sqrt(bob_precalc_params['w_Leq_squared'])
             w_L_bob = bob_precalc_params['w_L_beam']
-            tau_zen_bob = 0.91
+            tau_zen_bob = 0.81
             slant_distance_bob = bob_precalc_params['slant_distance']
             sigma_x_bob = sigma_theta_x * slant_distance_bob
             sigma_y_bob = sigma_theta_y * slant_distance_bob
@@ -416,6 +439,7 @@ def main():
                 w_L_bob, w_Leq_bob, tau_zen_bob, varphi_mod_bob_val, wavelength, h_OGS,
                 h_atm, Cn2_profile, a
             )
+            print(lambda_val, p_dark, e_0, e_pol)
 
             avg_overall_error_modified, integral_abserr_error = dblquad(
                 integrand_func_modified,
@@ -424,7 +448,10 @@ def main():
                 lambda eta_A: upper_bound,
                 args=integration_args_error
             )
-     
+            
+            print(f"  Theoretical Gain (Overall): {avg_overall_gain_scaled*100:.8f}%")
+            print(f"  Theoretical Error (Overall): {avg_overall_error_modified:.8f}")
+            print(f"  Overall Gain (Overall): {avg_overall_gain*100:.8f}")
 
             # --- QBER Calculations ---
             calculated_qber_overall = 0.0
@@ -439,6 +466,8 @@ def main():
             else:
                 theoretical_qber = 0.5 # Default to 0.5 if theoretical gain is near zero
 
+            print()
+            
             print(f"  Overall QBER (Simulated): {calculated_qber_overall:.8f}")
             print(f"  Overall Gain (Simulated): {average_simulated_sifted_bits*100:.8f}")
             print(f"  Overall QBER (Theoretical): {theoretical_qber:.8f}")
@@ -449,9 +478,9 @@ def main():
             if bob_id == 1:
                 results_bob1_sim_qber.append(calculated_qber_overall)
                 results_bob1_theo_qber.append(theoretical_qber)
-            elif bob_id == 2:
-                results_bob2_sim_qber.append(calculated_qber_overall)
-                results_bob2_theo_qber.append(theoretical_qber)
+            # elif bob_id == 2:
+            #     results_bob2_sim_qber.append(calculated_qber_overall)
+            #     results_bob2_theo_qber.append(theoretical_qber)
 
             # --- Calculate SKR ---
             skr_sim = calculate_skr(average_simulated_sifted_bits, calculated_qber_overall)/2
@@ -465,9 +494,9 @@ def main():
             if bob_id == 1:
                 results_bob1_sim_skr.append(skr_sim)
                 results_bob1_theo_skr.append(skr_theo)
-            elif bob_id == 2:
-                results_bob2_sim_skr.append(skr_sim)
-                results_bob2_theo_skr.append(skr_theo)
+            # elif bob_id == 2:
+            #     results_bob2_sim_skr.append(skr_sim)
+            #     results_bob2_theo_skr.append(skr_theo)
             
             skr_sim_for_current_ns.append(skr_sim)
             skr_theo_for_current_ns.append(skr_theo)
@@ -487,11 +516,11 @@ def main():
     # --- Plotting the SKR results ---
     plt.figure(figsize=(12, 8))
 
-    plt.plot(ns_values, results_bob1_sim_skr, 'o', color='blue', label=f'Bob 1 (Zenith 10°) Simulated SKR')
-    plt.plot(ns_values, results_bob1_theo_skr, '--', color='blue', label=f'Bob 1 (Zenith 10°) Theoretical SKR')
+    plt.plot(ns_values, results_bob1_sim_skr, 'o', color='blue', label=f'Bob 1 (Zenith 59.12231128°) Simulated SKR')
+    plt.plot(ns_values, results_bob1_theo_skr, '--', color='blue', label=f'Bob 1 (Zenith 59.12231128°) Theoretical SKR')
 
-    plt.plot(ns_values, results_bob2_sim_skr, 'o', color='red', label=f'Bob 2 (Zenith 45°) Simulated SKR')
-    plt.plot(ns_values, results_bob2_theo_skr, '--', color='red', label=f'Bob 2 (Zenith 45°) Theoretical SKR')
+    # plt.plot(ns_values, results_bob2_sim_skr, 'o', color='red', label=f'Bob 2 (Zenith 45°) Simulated SKR')
+    # plt.plot(ns_values, results_bob2_theo_skr, '--', color='red', label=f'Bob 2 (Zenith 45°) Theoretical SKR')
     
     plt.plot(ns_values, results_alice_sim_skr, 'o', color='green', label=f'Alice Simulated SKR')
     plt.plot(ns_values, results_alice_theo_skr, '--', color='green', label=f'Alice Theoretical SKR')
@@ -509,11 +538,11 @@ def main():
     # --- Plotting the QBER results ---
     plt.figure(figsize=(12, 8))
 
-    plt.plot(ns_values, results_bob1_sim_qber, 'o', color='cyan', label=f'Bob 1 (Zenith 10°) Simulated QBER')
-    plt.plot(ns_values, results_bob1_theo_qber, '--', color='cyan', label=f'Bob 1 (Zenith 10°) Theoretical QBER')
+    plt.plot(ns_values, results_bob1_sim_qber, 'o', color='cyan', label=f'Bob 1 (Zenith 59.12231128°) Simulated QBER')
+    plt.plot(ns_values, results_bob1_theo_qber, '--', color='cyan', label=f'Bob 1 (Zenith 59.12231128°) Theoretical QBER')
 
-    plt.plot(ns_values, results_bob2_sim_qber, 'o', color='magenta', label=f'Bob 2 (Zenith 45°) Simulated QBER')
-    plt.plot(ns_values, results_bob2_theo_qber, '--', color='magenta', label=f'Bob 2 (Zenith 45°) Theoretical QBER')
+    # plt.plot(ns_values, results_bob2_sim_qber, 'o', color='magenta', label=f'Bob 2 (Zenith 45°) Simulated QBER')
+    # plt.plot(ns_values, results_bob2_theo_qber, '--', color='magenta', label=f'Bob 2 (Zenith 45°) Theoretical QBER')
 
     plt.xlabel('Average Photon Number ($n_s$)')
     plt.ylabel('Quantum Bit Error Rate (QBER)')
@@ -528,3 +557,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
