@@ -40,9 +40,9 @@ def rvs_pointing_err(
 
 
 def generate_Siftedkey(num_qubits, p_error_alice, p_error_bob, backend):
-    bell_pair = int(num_qubits/2)
-    repeater_basis = qrng(bell_pair, backend)
-    user_basis = qrng(bell_pair, backend)
+    qubits = num_qubits* 2
+    repeater_basis = qrng(qubits, backend)
+    user_basis = qrng(qubits, backend)
 
     # Compose the quantum circuit to generate the Bell state
     qc = compose_quantum_circuit(num_qubits)
