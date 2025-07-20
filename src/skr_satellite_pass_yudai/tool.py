@@ -142,7 +142,7 @@ def apply_noise_model(p_alice_meas, p_bob_meas, num_pairs_for_circuit):
 # e_pol = 1/100 # Polarization misalignment error
 
 a = 0.75 # Aperture radius of the receiver telescope (m)
-n_s = 0.1 # Mean photon number per pulse (for single photon source)
+n_s = 0.5 # Mean photon number per pulse (for single photon source)
 wavelength = 0.85e-6 # Wavelength of light (m)
 h_OGS = 10 # Height of Optical Ground Station (m)
 h_s = 500 * 1000 # Height of Satellite (m)

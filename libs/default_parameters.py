@@ -58,7 +58,7 @@
 
 # Yudai # Default parameters for the simulation
 a = 0.75 # Aperture radius of the receiver telescope (m)
-n_s = 0.1 # Mean photon number per pulse (for single photon source)
+n_s = 0.5 # Mean photon number per pulse (for single photon source)
 lambda_signal = 0.5 * n_s
 wavelength = 0.85e-6 # Wavelength of light (m)
 h_OGS = 10 # Height of Optical Ground Station (m)
