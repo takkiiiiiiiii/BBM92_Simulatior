@@ -191,7 +191,7 @@ def calculate_skr(sifted_bit_percentage, qber):
 
     H_QBER = binary_entropy(QBER_for_H)
     
-    skr = R_key_raw * (1 - 1.22*H_QBER)
+    skr = R_key_raw * (1 - 2.1*H_QBER)
 
     skr = np.maximum(0, skr) # Clip SKR to be non-negative
     

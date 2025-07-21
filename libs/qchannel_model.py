@@ -306,6 +306,10 @@ def entropy_func(p):
     res = -p * np.log2(p) - (1-p) * np.log2(1-p)
     return res
 
+def binary_entropy(x):
+    """Calculates the binary entropy H(x)."""
+    x = np.clip(x, 1e-10, 1 - 1e-10) # Clip to avoid log(0) and log(1) issues
+    return -x * np.log2(x) - (1 - x) * np.log2(1 - x)
 
 def compute_SKR_BBM92(qber, avg_yield, rep_rate=1e9, sifting_coefficient=0.5, kr_efficiency=1.22):
     """
@@ -516,8 +520,10 @@ def compute_avg_qber_bbm92(
         epsabs=1e-9, epsrel=1e-9
     )
 
+    avg_yield_scaled = avg_yield / 2  # Sifted bit rate is half of the yield
+
     avg_qber = avg_error / avg_yield if avg_yield > 0 else 0
-    return avg_qber, avg_yield, avg_error
+    return avg_qber, avg_yield, avg_error, avg_yield_scaled
 
     
 def compute_insta_eta(tau_zen, zenith_angle_rad, slant_path, mu_x, mu_y, sigma_theta_x, sigma_theta_y, a, w_Leq_squared_alice, theta_rad, sigma_R_squared):
@@ -570,3 +576,24 @@ def Q_lambda_func_modified(eta_A, eta_B, lambda_val, p_dark, e_0_val, e_pol_val)
     q_modified = e_0_val * q_lambda_original - additional_term
     
     return q_modified
+
+
+# Secret Key Rate (SKR) の計算
+def compute_SKR_BBM92_modified(sifted_Keyrate, qber, rep_rate=1e9, kr_efficiency=1.22):
+    """
+    Calculates the Secret Key Rate (SKR) in Kbit/s.
+    sifted_bit_percentage: Sifted Bit (%) as a percentage (e.g., 5.0 for 5%)
+    qber: QBER as a decimal (e.g., 0.01 for 1%)
+    """
+    R_key_raw = rep_rate * (sifted_Keyrate) # Convert percentage to probability
+    
+    # QBERが0または1に非常に近い場合、log2(0)によるエラーを回避するためのクリッピング
+    # QBER_for_H = np.clip(qber, 1e-10, 1 - 1e-10)
+
+    H_QBER = binary_entropy(qber)
+    
+    skr = R_key_raw * (1 - kr_efficiency*H_QBER)
+
+    skr = np.maximum(0, skr)
+    
+    return skr
