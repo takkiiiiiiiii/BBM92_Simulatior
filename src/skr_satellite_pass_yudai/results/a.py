@@ -2,7 +2,7 @@ import numpy as np
 
 # 入力ファイルと出力ファイルの名前を定義
 input_filename = 'qber_siml_bbm92_test1_n_s05_v2.npy'
-output_filename = 'qber_siml_bbm92_test1_n_s05_v99.npy'
+output_filename = 'qber_siml_bbm92_test1_n_s05_v2.npy'
 
 try:
     # 1. ファイルからNumPy配列を読み込む
